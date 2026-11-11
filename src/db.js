@@ -1,14 +1,23 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
+const { mongoUri } = require("./config");
 
-// Set up default mongoose connection
-const mongoDB = 'mongodb+srv://binary_amigo:webarebears@cluster0.i1nsxes.mongodb.net/mockInterviewQuestions';
-mongoose.connect(mongoDB);
+// One shared connection, reused across requests (and across invocations of
+// the same warm serverless instance on Vercel).
+let connecting = null;
 
-// Get the default connection
-const db = mongoose.connection;
+function connect() {
+  if (mongoose.connection.readyState === 1) return Promise.resolve(mongoose.connection);
+  if (!mongoUri) return Promise.reject(new Error("MONGODB_URI is not set"));
+  if (!connecting) {
+    connecting = mongoose
+      .connect(mongoUri, { serverSelectionTimeoutMS: 8000 })
+      .then(() => mongoose.connection)
+      .catch((err) => {
+        connecting = null; // allow a retry on the next request
+        throw err;
+      });
+  }
+  return connecting;
+}
 
-// Bind connection to error event (to get notification of connection errors)
-db.on('error', console.error.bind(console, 'MongoDB connection error:'));
-
-// Export the connection
-module.exports = db;
+module.exports = { connect };
